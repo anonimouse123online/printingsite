@@ -18,7 +18,7 @@ export async function api(path, options = {}) {
   const headers = { ...(isForm ? {} : options.body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers }
   let response
   try { response = await fetch(`${BASE}${path}`, { ...options, headers }) }
-  catch { throw new ApiError('Unable to reach PrintReady. Check that the backend is running at the configured API URL.', 0, 'NETWORK_ERROR') }
+  catch (error) { if (error?.name === 'AbortError') throw error; throw new ApiError('Unable to reach PrintReady. Check that the backend is running at the configured API URL.', 0, 'NETWORK_ERROR') }
   const payload = response.status === 204 ? null : await response.json().catch(() => null)
   if (!response.ok) {
     const problem = payload?.error || {}
@@ -28,13 +28,25 @@ export async function api(path, options = {}) {
 }
 
 const json = body => JSON.stringify(body)
+const paged = (path, { cursor, limit, signal } = {}) => {
+  const params = new URLSearchParams()
+  if (limit) params.set('limit', String(limit))
+  if (cursor) params.set('cursor', cursor)
+  const suffix = params.toString()
+  return api(`${path}${suffix ? `?${suffix}` : ''}`, { signal })
+}
 export const endpoints = {
   register: body => api('/auth/register', { method: 'POST', body: json(body) }),
   registerOwner: body => api('/auth/register/shop-owner', { method: 'POST', body: json(body) }),
   login: body => api('/auth/login', { method: 'POST', body: json(body) }),
   logout: () => api('/auth/logout', { method: 'POST' }),
   me: () => api('/auth/me'),
-  shops: params => api(`/shops${params?.toString() ? `?${params}` : ''}`),
+  shops: (params, { signal, cursor, limit } = {}) => {
+    const query = new URLSearchParams(params || '')
+    if (limit) query.set('limit', String(limit))
+    if (cursor) query.set('cursor', cursor)
+    return api(`/shops${query.toString() ? `?${query}` : ''}`, { signal })
+  },
   shop: id => api(`/shops/${encodeURIComponent(id)}`),
   services: id => api(`/shops/${encodeURIComponent(id)}/services`),
   createShop: body => api('/shops', { method: 'POST', body: json(body) }),
@@ -51,7 +63,7 @@ export const endpoints = {
   updateProfile: body => api('/users/me', { method: 'PATCH', body: json(body) }),
   upload: async form => { const result = await api('/files', { method: 'POST', body: form }); return result.file ?? result },
   deleteFile: id => api(`/files/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  orders: () => api('/orders'),
+  orders: options => paged('/orders', options),
   order: id => api(`/orders/${encodeURIComponent(id)}`),
   orderFile: (orderId, fileId) => authenticatedBlob(`/orders/${encodeURIComponent(orderId)}/files/${encodeURIComponent(fileId)}`),
   createOrder: body => api('/orders', { method: 'POST', body: json(body) }),
@@ -71,16 +83,16 @@ export const endpoints = {
     return api(`/orders/${encodeURIComponent(id)}/payments/proof`, { method: 'POST', body })
   },
   reviewPayment: (id, status, reason) => api(`/orders/${encodeURIComponent(id)}/payments/review`, { method: 'PATCH', body: json({ status, ...(reason ? { reason } : {}) }) }),
-  orderMessages: (id, params = '') => api(`/orders/${encodeURIComponent(id)}/messages${params ? `?${params}` : ''}`),
+  orderMessages: (id, params = '', options = {}) => api(`/orders/${encodeURIComponent(id)}/messages${params ? `?${params}` : ''}`, options),
   sendOrderMessage: (id, message) => api(`/orders/${encodeURIComponent(id)}/messages`, { method: 'POST', body: json({ message }) }),
   ownerDashboard: () => api('/owner/dashboard'),
-  ownerOrders: () => api('/owner/orders'),
+  ownerOrders: options => paged('/owner/orders', options),
   ownerShops: () => api('/owner/shops'),
   adminDashboard: () => api('/admin/dashboard'),
-  pendingShops: () => api('/admin/shops/pending'),
+  pendingShops: options => paged('/admin/shops/pending', options),
   adminShop: id => api(`/admin/shops/${encodeURIComponent(id)}`),
-  adminOrders: () => api('/admin/orders'),
-  adminDisputes: () => api('/admin/disputes'),
+  adminOrders: options => paged('/admin/orders', options),
+  adminDisputes: options => paged('/admin/disputes', options),
   reviewDispute: (id,status,resolutionNotes) => api('/admin/disputes/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify({status,resolutionNotes}) }),
   verifyShop: (id, status, notes) => api(`/admin/shops/${encodeURIComponent(id)}/verification`, { method: 'PATCH', body: json({ status, notes }) }),
 }

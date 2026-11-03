@@ -3,8 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, ArrowRight, Upload } from 'lucide-react'
 import { endpoints } from './api'
+import { formatCents, formatPricingOption } from './currency.js'
 
-const money=cents=>typeof cents==='number'?`PHP ${(cents/100).toFixed(2)}`:'Price unavailable'
+const money=cents=>typeof cents==='number'?formatCents(cents):'Price unavailable'
 const nameOf=shop=>shop?.shopName||'Print shop'
 const locationOf=shop=>[shop?.city,shop?.address].filter(Boolean).join(' · ')
 function Note({children}){return <div className="notice"><AlertCircle size={15}/>{children}</div>}
@@ -33,7 +34,7 @@ export default function OrderBuilder({Shell}){
       </section>
       <section className="panel"><div className="panel-heading"><span className="number">02</span><div><h2>Print settings</h2><p>Choose an available shop service and priced option.</p></div></div>
         <div className="form-grid"><label>Service<select value={serviceId} onChange={e=>{const next=services.find(s=>s.id===e.target.value);setServiceId(e.target.value);setOptionKey(Object.keys(next?.pricingConfiguration?.rates||{})[0]||'')}}><option value="">Choose service</option>{services.map(s=><option value={s.id} key={s.id}>{s.serviceName}</option>)}</select></label>
-          <label>Print option<select value={optionKey} disabled={!rateKeys.length} onChange={e=>setOptionKey(e.target.value)}><option value="">No configured prices</option>{rateKeys.map(key=><option value={key} key={key}>{key.split(':').join(' / ')} · {money(rates[key])} per page</option>)}</select></label>
+          <label>Print option<select value={optionKey} disabled={!rateKeys.length} onChange={e=>setOptionKey(e.target.value)}><option value="">No configured prices</option>{rateKeys.map(key=><option value={key} key={key}>{formatPricingOption(key)} — {money(rates[key])} per page</option>)}</select></label>
           <label>Copies<input type="number" min="1" max="500" value={copies} onChange={e=>setCopies(Math.max(1,Math.min(500,Number(e.target.value)||1)))}/></label>
           <label>Page range<input value={pageRange} onChange={e=>setPageRange(e.target.value)} placeholder={`All (${uploaded?.pageCount||'pages'})`}/></label>
         </div>

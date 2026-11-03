@@ -1,42 +1,60 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Download, MessageCircle, Send } from 'lucide-react'
 import { endpoints, orderAccessError } from './api'
+import RejectReasonModal from './RejectReasonModal.jsx'
+import { formatCents } from './currency.js'
 import './owner-order.css'
 
-const money = cents => `PHP ${(Number(cents || 0) / 100).toFixed(2)}`
+const money = cents => formatCents(Number(cents || 0))
 const pretty = value => value?.replaceAll('_', ' ') || 'Unknown'
+const terminalOrder = status => ['COMPLETED', 'REJECTED', 'CANCELLED', 'REFUNDED'].includes(status)
+const mergeMessages = (current = [], incoming = []) => {
+  const byId = new Map([...current, ...incoming].map(message => [message.id, message]))
+  return [...byId.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+}
 
 export default function OwnerOrderDetail({ Shell }) {
   const { id: orderId } = useParams()
   const qc = useQueryClient()
   const [message, setMessage] = useState('')
-  const [rejectReason, setRejectReason] = useState('')
-  const [paymentReason, setPaymentReason] = useState('')
+  const [rejectDialog, setRejectDialog] = useState(null)
   const [qrImage, setQrImage] = useState(null)
   const [qrMethod, setQrMethod] = useState('GCASH')
   const [qrRecipient, setQrRecipient] = useState('')
   const [qrWallet, setQrWallet] = useState('')
   const [actionSuccess, setActionSuccess] = useState('')
+  const [rejectToast, setRejectToast] = useState('')
+  useEffect(() => { if (!rejectToast) return; const timer = setTimeout(() => setRejectToast(''), 4000); return () => clearTimeout(timer) }, [rejectToast])
   const accountQuery = useQuery({ queryKey: ['account'], queryFn: endpoints.me, retry: false })
-  const orderQuery = useQuery({ queryKey: ['order', orderId], queryFn: () => endpoints.order(orderId), retry: false, refetchInterval: 15000 })
+  const orderQuery = useQuery({ queryKey: ['order', orderId], queryFn: () => endpoints.order(orderId), retry: false, refetchInterval: query => terminalOrder(query.state.data?.order?.orderStatus) ? false : 30000, refetchIntervalInBackground: false })
   const order = orderQuery.data?.order
-  const paymentsQuery = useQuery({ queryKey: ['order-payments', orderId], queryFn: () => endpoints.payments(orderId), enabled: !!order, retry: false, refetchInterval: 12000 })
-  const messagesQuery = useQuery({ queryKey: ['order-messages', orderId], queryFn: () => endpoints.orderMessages(orderId), enabled: !!order, retry: false, refetchInterval: 5000 })
+  const paymentsQuery = useQuery({ queryKey: ['order-payments', orderId], queryFn: () => endpoints.payments(orderId), enabled: !!order, retry: false, refetchInterval: query => order?.orderStatus === 'AWAITING_PAYMENT' && !query.state.data?.payments?.some(payment => payment.status === 'SUCCEEDED') ? 30000 : false, refetchIntervalInBackground: false })
+  useEffect(() => { if (order?.orderStatus === 'PAID') paymentsQuery.refetch() }, [order?.orderStatus])
+  const messagesQuery = useQuery({ queryKey: ['order-messages', orderId], queryFn: async () => {
+    const key = ['order-messages', orderId]
+    const previous = qc.getQueryData(key)
+    const last = previous?.messages?.at(-1)
+    const params = new URLSearchParams({ limit: last ? '100' : '50' })
+    if (last) { params.set('after', last.createdAt); params.set('afterId', last.id) }
+    const next = await endpoints.orderMessages(orderId, params.toString())
+    return { ...next, messages: mergeMessages(previous?.messages, next.messages) }
+  }, enabled: !!order, retry: false, refetchInterval: 15000, refetchIntervalInBackground: false })
   const refresh = () => Promise.all([
     qc.invalidateQueries({ queryKey: ['order', orderId] }),
     qc.invalidateQueries({ queryKey: ['order-payments', orderId] }),
     qc.invalidateQueries({ queryKey: ['order-messages', orderId] }),
     qc.invalidateQueries({ queryKey: ['owner-orders'] }),
+    qc.invalidateQueries({ queryKey: ['owner-dashboard'] }),
   ])
   const action = useMutation({
-    mutationFn: ({ type, value }) => type === 'confirm' ? endpoints.confirmOrder(orderId)
-      : type === 'reject' ? endpoints.rejectOrder(orderId, value)
+    mutationFn: ({ type, value, reason }) => type === 'confirm' ? endpoints.confirmOrder(orderId)
+      : type === 'reject' ? endpoints.rejectOrder(orderId, reason)
         : type === 'status' ? endpoints.setOrderStatus(orderId, value)
           : type === 'pickup' ? endpoints.confirmPickup(orderId)
-            : endpoints.reviewPayment(orderId, value, value === 'REJECTED' ? paymentReason : undefined),
-    onSuccess: async (result, variables) => { await refresh(); setActionSuccess(variables.type === 'confirm' ? 'Order confirmed. The customer can now view payment instructions.' : variables.type === 'pickup' ? 'Pickup handover confirmed. The order is complete.' : 'Order updated successfully.') },
+            : endpoints.reviewPayment(orderId, value, value === 'REJECTED' ? reason : undefined),
+    onSuccess: async (result, variables) => { await refresh(); if (variables.type === 'reject' || (variables.type === 'review' && variables.value === 'REJECTED')) { setRejectDialog(null); setRejectToast(variables.type === 'reject' ? 'Order rejected successfully.' : 'Payment proof rejected successfully.'); setActionSuccess('') } else setActionSuccess(variables.type === 'confirm' ? 'Order confirmed. The customer can now view payment instructions.' : variables.type === 'pickup' ? 'Pickup handover confirmed. The order is complete.' : 'Order updated successfully.') },
   })
   const saveQr = useMutation({
     mutationFn: () => endpoints.configureShopPaymentQr(order.shop.id, { image: qrImage, paymentMethod: qrMethod, recipientName: qrRecipient, walletNumber: qrWallet }),
@@ -68,6 +86,7 @@ export default function OwnerOrderDetail({ Shell }) {
       <Link to="/owner" className="owner-back"><ArrowLeft size={14}/> Shop dashboard</Link>
       {(action.error || saveQr.error || download.error || paymentsQuery.error || messagesQuery.error) && <div className="notice">{action.error?.message || saveQr.error?.message || download.error?.message || paymentsQuery.error?.message || messagesQuery.error?.message}</div>}
       {actionSuccess && <div className="notice owner-success" role="status">{actionSuccess}</div>}
+      {rejectToast && <div className="reject-success-toast" role="status">{rejectToast}</div>}
       <section className="panel owner-order-summary">
         <div><span className="eyebrow">ORDER STATUS</span><h2>{pretty(currentStatus)}</h2></div>
         <div className="owner-order-total"><small>Final total</small><b>{money(order.totalCents)}</b></div>
@@ -91,8 +110,7 @@ export default function OwnerOrderDetail({ Shell }) {
             {manualPayment.rejectionReason && <p className="owner-rejection">Rejected: {manualPayment.rejectionReason}</p>}
             {manualPayment.reviewStatus === 'PENDING_VERIFICATION' && <div className="owner-review-actions">
               <button className="button primary" disabled={action.isPending} onClick={() => action.mutate({ type: 'review', value: 'APPROVED' })}>Approve payment</button>
-              <input aria-label="Payment rejection reason" value={paymentReason} onChange={event => setPaymentReason(event.target.value)} placeholder="Reason if rejecting"/>
-              <button className="button secondary" disabled={action.isPending || paymentReason.trim().length < 3} onClick={() => action.mutate({ type: 'review', value: 'REJECTED' })}>Reject proof</button>
+              <button className="button secondary" disabled={action.isPending} onClick={() => { action.reset(); setRejectDialog('payment') }}>Reject proof</button>
             </div>}
           </> : <p className="muted">{currentStatus === 'AWAITING_PAYMENT' ? 'Waiting for the customer to submit a wallet transfer reference.' : 'No payment record is attached yet.'}</p>}
         </section>
@@ -121,7 +139,7 @@ export default function OwnerOrderDetail({ Shell }) {
       </section>
       <section className="panel owner-order-actions">
         <h2>Order actions</h2>
-        {currentStatus === 'SUBMITTED' && <><button className="button primary" disabled={action.isPending} onClick={() => action.mutate({ type: 'confirm' })}>Confirm order</button><input value={rejectReason} onChange={event => setRejectReason(event.target.value)} placeholder="Reason if rejecting"/><button className="button secondary" disabled={action.isPending} onClick={() => action.mutate({ type: 'reject', value: rejectReason })}>Reject order</button></>}
+        {currentStatus === 'SUBMITTED' && <><button className="button primary" disabled={action.isPending} onClick={() => action.mutate({ type: 'confirm' })}>Confirm order</button><button className="button secondary" disabled={action.isPending} onClick={() => { action.reset(); setRejectDialog('order') }}>Reject order</button></>}
         {currentStatus === 'AWAITING_PAYMENT' && <p className="muted">Order is awaiting customer payment. Printing can begin after verified payment approval.</p>}
         {currentStatus === 'PAID' && <button className="button primary" disabled={action.isPending} onClick={() => action.mutate({ type: 'status', value: 'IN_QUEUE' })}>Add to print queue</button>}
         {currentStatus === 'IN_QUEUE' && <button className="button primary" disabled={action.isPending} onClick={() => action.mutate({ type: 'status', value: 'PRINTING' })}>Start printing</button>}
@@ -136,5 +154,6 @@ export default function OwnerOrderDetail({ Shell }) {
       </section>
       <section className="panel owner-order-history"><h2>Order progress history</h2>{order.history?.length ? order.history.map((entry, index) => <div className="table-row" key={entry.id || index}><span>{pretty(entry.toStatus)}</span><span>{new Date(entry.createdAt).toLocaleString()}</span></div>) : <p className="muted">No status changes recorded yet.</p>}</section>
     </div>
+    {rejectDialog && <RejectReasonModal title={rejectDialog === 'payment' ? 'Reject Payment Proof' : 'Reject Order'} description={rejectDialog === 'payment' ? 'Are you sure you want to reject this payment proof? Please provide a reason so the customer understands what needs to be corrected.' : undefined} busy={action.isPending} onCancel={() => setRejectDialog(null)} onConfirm={reason => action.mutateAsync(rejectDialog === 'payment' ? { type: 'review', value: 'REJECTED', reason } : { type: 'reject', reason })}/>}
   </Shell>
 }

@@ -3,14 +3,16 @@ import { Link, Navigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, ArrowRight, MessageCircle, PackageCheck } from 'lucide-react'
 import { endpoints, orderAccessError } from './api'
+import { formatCents } from './currency.js'
 import './manual-payment.css'
 
-const peso=cents=>typeof cents==='number'?`PHP ${(cents/100).toFixed(2)}`:'Final price unavailable'
+const peso=cents=>typeof cents==='number'?formatCents(cents):'Final price unavailable'
 const stages=[['SUBMITTED','Awaiting shop confirmation'],['AWAITING_PAYMENT','Awaiting payment'],['PAID','Paid'],['IN_QUEUE','In queue'],['PRINTING','Printing'],['READY_FOR_PICKUP','Ready for pickup'],['COMPLETED','Completed']]
 const labelStatus=s=>s?.replaceAll('_',' ')||'Unknown'
 const shopTitle=s=>s?.shopName||'Printing shop'
+const terminalOrder=status=>['COMPLETED','REJECTED','CANCELLED','REFUNDED'].includes(status)
 function Status({children}){return <div className="notice"><AlertCircle size={15}/>{children}</div>}
-function Loading(){return <div className="loading">Loading orderâ€¦</div>}
+function Loading(){return <div className="loading">Loading order¦</div>}
 
 export function QrCheckout({Shell}){
   const {id}=useParams()
@@ -20,9 +22,10 @@ export function QrCheckout({Shell}){
   const [receipt,setReceipt]=useState(null)
   const [qrSrc,setQrSrc]=useState('')
   const account=useQuery({queryKey:['account'],queryFn:endpoints.me,enabled:!!localStorage.getItem('printready_token'),retry:false})
-  const orderQuery=useQuery({queryKey:['order',id],queryFn:()=>endpoints.order(id),retry:false,refetchInterval:10000})
+  const orderQuery=useQuery({queryKey:['order',id],queryFn:()=>endpoints.order(id),retry:false,refetchInterval:query=>terminalOrder(query.state.data?.order?.orderStatus)?false:30000,refetchIntervalInBackground:false})
   const order=orderQuery.data?.order
-  const paymentsQuery=useQuery({queryKey:['order-payments',id],queryFn:()=>endpoints.payments(id),enabled:!!order&&account.data?.user?.role==='CUSTOMER',refetchInterval:12000,retry:false})
+  const paymentsQuery=useQuery({queryKey:['order-payments',id],queryFn:()=>endpoints.payments(id),enabled:!!order&&account.data?.user?.role==='CUSTOMER',refetchInterval:()=>order?.orderStatus==='AWAITING_PAYMENT'?30000:false,refetchIntervalInBackground:false,retry:false})
+  useEffect(()=>{if(order?.orderStatus==='PAID')paymentsQuery.refetch()},[order?.orderStatus])
   const instructionsQuery=useQuery({queryKey:['payment-instructions',id],queryFn:()=>endpoints.paymentInstructions(id),enabled:!!order&&order.orderStatus==='AWAITING_PAYMENT'&&account.data?.user?.role==='CUSTOMER',retry:false})
   const qrBlobQuery=useQuery({queryKey:['payment-qr-image',id],queryFn:()=>endpoints.paymentQrImage(id),enabled:!!instructionsQuery.data?.qrImageUrl,retry:false})
   useEffect(()=>{if(!qrBlobQuery.data)return;const url=URL.createObjectURL(qrBlobQuery.data);setQrSrc(url);return()=>URL.revokeObjectURL(url)},[qrBlobQuery.data])
@@ -60,9 +63,10 @@ export function OrderTracking({Shell}){
   const pickup=useMutation({mutationFn:()=>endpoints.confirmPickup(id),onSuccess:async()=>{await Promise.all([qc.invalidateQueries({queryKey:['order',id]}),qc.invalidateQueries({queryKey:['order-payments',id]})]);setPickupDialogOpen(false);setPickupAcknowledged(false)}})
   useEffect(()=>{if(!pickupDialogOpen)return;const closeOnEscape=event=>{if(event.key==='Escape'&&!pickup.isPending)setPickupDialogOpen(false)};window.addEventListener('keydown',closeOnEscape);return()=>window.removeEventListener('keydown',closeOnEscape)},[pickupDialogOpen,pickup.isPending])
   const accountQuery=useQuery({queryKey:['account'],queryFn:endpoints.me,enabled:!!localStorage.getItem('printready_token'),retry:false})
-  const orderQuery=useQuery({queryKey:['order',id],queryFn:()=>endpoints.order(id),retry:false,refetchInterval:10000})
+  const orderQuery=useQuery({queryKey:['order',id],queryFn:()=>endpoints.order(id),retry:false,refetchInterval:query=>terminalOrder(query.state.data?.order?.orderStatus)?false:30000,refetchIntervalInBackground:false})
   const order=orderQuery.data?.order
-  const paymentsQuery=useQuery({queryKey:['order-payments',id],queryFn:()=>endpoints.payments(id),enabled:!!order,refetchInterval:12000,retry:false})
+  const paymentsQuery=useQuery({queryKey:['order-payments',id],queryFn:()=>endpoints.payments(id),enabled:!!order,refetchInterval:()=>order?.orderStatus==='AWAITING_PAYMENT'?30000:false,refetchIntervalInBackground:false,retry:false})
+  useEffect(()=>{if(order?.orderStatus==='PAID')paymentsQuery.refetch()},[order?.orderStatus])
   const payments=paymentsQuery.data?.payments||[]
   if(accountQuery.data?.user?.role==='SHOP_OWNER')return <Navigate to={`/owner/orders/${encodeURIComponent(id)}`} replace/>
   if(orderQuery.isLoading)return <Shell title="Order tracking" kicker="ORDER DETAIL"><Loading/></Shell>
@@ -72,6 +76,7 @@ export function OrderTracking({Shell}){
   return <Shell title="Order detail" kicker="ORDER TRACKING" description={order.orderReference}>
     <div className="tracking-card"><div className="tracking-heading"><div><h2>{shopTitle(order.shop)}</h2><p className="muted">{order.orderReference}</p></div><span className="status-pill">{labelStatus(order.orderStatus)}</span></div>
       {order.orderStatus==='SUBMITTED'&&<Status>Waiting for shop confirmation.</Status>}
+      {order.orderStatus==='REJECTED'&&order.rejectionReason&&<Status>Order rejection reason: {order.rejectionReason}</Status>}
       <h3 className="progress-title">Order progress</h3><div className="timeline">{stages.map(([s,label],i)=><div className={`${s===order.orderStatus?'current':''} ${i<index?'complete':''}`} key={s}><i/>{label}</div>)}</div>
       <section className="progress-panel"><span className="eyebrow">PAYMENT</span><b>{paymentStage}</b>{paymentsQuery.error&&<small>Payment status refresh failed: {paymentsQuery.error.message}</small>}</section>
       <div className="order-detail-lines"><p>Customer: <b>{order.customer?.fullName || 'Customer'}</b></p><p>Final price: <b>{peso(order.totalCents)}</b></p>{order.items?.map(item=><p className="muted" key={item.id}>{item.file?.originalFilename} Â· {item.pageCount} pages Â· {item.copies} copies</p>)}</div>

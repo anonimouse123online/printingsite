@@ -1,0 +1,21 @@
+.reject-modal-backdrop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:20px;background:rgba(17,24,39,.48)}
+.reject-modal{position:relative;width:min(100%,480px);padding:28px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;color:#111827;box-shadow:0 24px 70px rgba(15,23,42,.22)}
+.reject-modal h2{margin:0 38px 9px 0;color:#111827;font-size:21px;letter-spacing:-.4px}
+.reject-modal>p{margin:0 0 22px;color:#6b7280;font-size:13px;line-height:1.6}
+.reject-modal-close{position:absolute;top:17px;right:17px;width:34px;height:34px;display:grid;place-items:center;border:0;border-radius:7px;background:transparent;color:#6b7280;cursor:pointer}
+.reject-modal-close:hover{background:#f3f4f6;color:#111827}
+.reject-modal form{display:grid;gap:8px}
+.reject-modal label{font-size:12px;font-weight:600;color:#374151}
+.reject-modal textarea{width:100%;min-height:120px;resize:vertical;border:1px solid #d1d5db;border-radius:7px;padding:11px 12px;background:#fff;color:#111827;font-family:inherit;font-size:13px;line-height:1.5;outline:none;transition:border-color 150ms ease,box-shadow 150ms ease}
+.reject-modal textarea::placeholder{color:#9ca3af}
+.reject-modal textarea:focus{border-color:#6b7280;box-shadow:0 0 0 3px rgba(107,114,128,.16)}
+.reject-modal textarea[aria-invalid=true]{border-color:#dc2626}
+.reject-modal-count,.reject-modal-error{font-size:11px}.reject-modal-count{justify-self:end;color:#9ca3af}.reject-modal-error{color:#b91c1c}
+.reject-modal-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:14px}
+.reject-modal-actions button{min-height:40px;border:1px solid transparent;border-radius:7px;padding:9px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:background-color 150ms ease,opacity 150ms ease}
+.reject-modal-actions button:focus-visible,.reject-modal-close:focus-visible{outline:2px solid #6b7280;outline-offset:2px}
+.reject-cancel{background:#f3f4f6;color:#374151}.reject-cancel:hover{background:#e5e7eb}
+.reject-confirm{background:#dc2626;color:#fff}.reject-confirm:hover{background:#b91c1c}
+.reject-modal-actions button:disabled,.reject-modal-close:disabled{opacity:.55;cursor:not-allowed}
+@media(max-width:520px){.reject-modal{padding:23px 19px}.reject-modal-actions{flex-direction:column-reverse}.reject-modal-actions button{width:100%}}
+.reject-success-toast{position:fixed;right:22px;bottom:22px;z-index:1100;max-width:min(420px,calc(100vw - 32px));padding:12px 16px;border:1px solid #bbf7d0;border-radius:9px;background:#f0fdf4;color:#166534;box-shadow:0 12px 36px rgba(15,23,42,.16);font-size:13px;font-weight:600}
