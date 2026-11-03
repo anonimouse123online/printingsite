@@ -13,3 +13,133 @@
 .nav-links>a:hover:not(.nav-active){background:#f3f4f6;color:#111827}
 .nav-links>a.nav-active,.nav-actions .login-link.nav-active{background:#f3f4f6;color:#111827;font-weight:600;border-radius:8px;padding:10px 16px}
 .nav-actions .nav-dashboard-active{background:#f3f4f6;color:#111827;border-color:#f3f4f6}
+
+/* Responsive navigation and narrow-screen refinements */
+:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.searchbox:focus-within { border-color: var(--border2); box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 18%, transparent); }
+.mobile-role-link { display: none !important; }
+.nav-backdrop { display: none; }
+@media (max-width: 760px) {
+  .header { height: 60px; }
+  .nav { position: relative; }
+  .nav-actions { display: none; }
+  .menu-toggle { display: grid; width: 44px; height: 44px; position: relative; z-index: 23; }
+  .nav-links, .nav-links.show {
+    display: none;
+    position: fixed;
+    z-index: 22;
+    top: calc(60px + env(safe-area-inset-top));
+    left: 0;
+    right: 0;
+    max-height: calc(100dvh - 60px - env(safe-area-inset-top));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px calc(20px + env(safe-area-inset-bottom));
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    animation: nav-open 180ms ease-out both;
+  }
+  .nav-links.show { display: flex; }
+  .nav-links > a, .nav-links .mobile-role-link {
+    display: flex !important;
+    align-items: center;
+    min-height: 48px;
+    padding: 12px 8px;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    font-size: 14px;
+  }
+  .nav-links > a.nav-active { background: var(--surface2); color: var(--text); }
+  .mobile-nav-actions { display: flex; align-items: center; justify-content: space-between; min-height: 56px; padding-top: 10px; }
+  .mobile-nav-actions .icon-button { width: 44px; height: 44px; }
+  .mobile-nav-actions .button { min-height: 44px; }
+  .nav-backdrop { display: block; position: fixed; z-index: 21; inset: 60px 0 0; width: 100%; height: calc(100dvh - 60px); border: 0; background: rgb(9 9 11 / 42%); }
+  .portal-nav button, .button, .row-actions button, .row-actions a { min-height: 44px; }
+  .portal-nav button { padding-inline: 12px; }
+  .table-panel { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
+  .table-panel .table-head, .table-panel .table-row { min-width: 650px; }
+  .table-head span:nth-child(n+4) { display: initial; }
+  .table-head { grid-template-columns: 1.1fr 1fr 1fr .6fr .9fr .8fr; }
+  .table-row { min-width: 650px; }
+  .admin-review-actions button { min-height: 44px; }
+  .reject-modal-backdrop, .pickup-modal-backdrop { padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); }
+  .reject-modal, .pickup-modal { max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; }
+  .pickup-modal-actions .button { min-height: 44px; }
+  .owner-order-actions .button, .form-actions .button, .tracking-actions .button { min-height: 44px; }
+  .footer { padding-bottom: env(safe-area-inset-bottom); }
+}
+@keyframes nav-open { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 460px) {
+  .wrap { width: calc(100% - 32px); }
+  .search-panel { grid-template-columns: minmax(0, 1fr); }
+  .searchbox { grid-column: auto; }
+  .search-panel > input, .search-panel select, .search-panel .button { width: 100%; min-height: 44px; }
+  .searchbox input { min-width: 0; width: 100%; }
+  .hero h1 { font-size: clamp(42px, 13vw, 52px); letter-spacing: -.055em; }
+  .hero-actions { flex-wrap: wrap; }
+  .hero-actions .button { min-height: 44px; }
+  .signup-choice-list { grid-template-columns: minmax(0, 1fr); }
+  .signup-steps { gap: 6px; }
+  .signup-steps > div { font-size: 7px; }
+  .hours-row { grid-template-columns: minmax(58px, .8fr) minmax(44px, .55fr) minmax(0, 1fr) minmax(0, 1fr); gap: 4px; }
+  .hours-row input[type=time] { min-width: 0; width: 100%; font-size: 8px; }
+  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pickup-modal-actions { grid-template-columns: 1fr; }
+  .tracking-heading { display: grid; }
+}
+@media (max-width: 360px) {
+  .wrap { width: calc(100% - 28px); }
+  .metric-grid { grid-template-columns: minmax(0, 1fr); }
+  .trust-content > div { grid-template-columns: minmax(0, 1fr); }
+  .hero-actions { align-items: stretch; flex-direction: column; }
+  .hero-actions .button { width: 100%; }
+  .owner-signup-panel { padding: 12px; }
+  .pickup-summary-grid { grid-template-columns: minmax(0, 1fr); }
+  .pickup-summary-grid > div:nth-child(odd) { border-right: 0; }
+  .pickup-summary-grid > div + div { border-top: 1px solid var(--border); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-links.show { animation: none; }
+}
+
+/* Keep long content and dashboard controls inside the viewport. */
+@media (max-width: 760px) {
+  .page-wrap, .portal-layout, .portal-main, .panel, .shop-card { min-width: 0; }
+  .portal-layout { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .portal-nav {
+    display: flex;
+    gap: 6px;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 2px 1px 8px;
+    scrollbar-width: thin;
+  }
+  .portal-nav button { flex: 0 0 auto; white-space: nowrap; }
+  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .table-panel { max-width: 100%; }
+  .table-panel .panel-heading { min-width: 0; }
+  .table-panel .panel-heading > div { min-width: 0; }
+  .table-panel .panel-heading p { overflow-wrap: anywhere; }
+  .table-row > span, .table-head > span { min-width: 0; overflow-wrap: anywhere; }
+  .admin-review-card, .admin-review-actions, .row-actions { min-width: 0; }
+  .search-panel, .detail-layout, .portal-main > .panel:not(.table-panel) { min-width: 0; }
+  .panel-heading { min-width: 0; }
+  input, select, textarea { max-width: 100%; }
+  button, a { touch-action: manipulation; }
+}
+@media (max-width: 360px) {
+  .portal-nav button { padding-inline: 9px; font-size: 11px; }
+  .metric-grid { grid-template-columns: minmax(0, 1fr); }
+  .table-panel { padding-inline: 12px; }
+  .table-panel .table-head, .table-panel .table-row { min-width: 600px; }
+  .shop-card { padding: 13px; }
+}
+@media (max-width: 760px) {
+  html, body, #root { max-width: 100%; }
+  body { overflow-x: hidden; }
+}
